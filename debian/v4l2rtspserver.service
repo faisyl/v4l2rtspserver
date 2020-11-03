@@ -1,0 +1,14 @@
+[Unit]
+Description=V4L2 RTSP server
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+ExecStart=/usr/local/bin/v4l2rtspserver -S1 -F 15 
+#ExecStart=/usr/local/bin/v4l2rtspserver -S1 -F 15 -U username:somepassword
+WorkingDirectory=/usr/local/share/v4l2rtspserver
+
+[Install]
+WantedBy=multi-user.target
