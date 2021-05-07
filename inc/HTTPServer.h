@@ -113,13 +113,18 @@ class TCPSink: public MediaSink {
 // ---------------------------------------------------------
 //  Extend RTSP server to add support for HLS and MPEG-DASH
 // ---------------------------------------------------------
+#if LIVEMEDIA_LIBRARY_VERSION_INT < 1606435200
+#define SOCKETCLIENT sockaddr_in 
+#else
+#define SOCKETCLIENT sockaddr_storage const&
+#endif
 class HTTPServer : public RTSPServer
 {
 
 	class HTTPClientConnection : public RTSPServer::RTSPClientConnection
 	{
 		public:
-			HTTPClientConnection(RTSPServer& ourServer, int clientSocket, struct sockaddr_in clientAddr)
+			HTTPClientConnection(RTSPServer& ourServer, int clientSocket, struct SOCKETCLIENT clientAddr)
 		       : RTSPServer::RTSPClientConnection(ourServer, clientSocket, clientAddr), m_TCPSink(NULL), m_StreamToken(NULL), m_Subsession(NULL), m_Source(NULL) {
 			}
 			virtual ~HTTPClientConnection();
@@ -149,23 +154,38 @@ class HTTPServer : public RTSPServer
 		static HTTPServer* createNew(UsageEnvironment& env, Port rtspPort, UserAuthenticationDatabase* authDatabase, unsigned reclamationTestSeconds, unsigned int hlsSegment, const std::string webroot) 
 		{
 			HTTPServer* httpServer = NULL;
-			int ourSocket = setUpOurSocket(env, rtspPort);
-			if (ourSocket != -1) 
+#if LIVEMEDIA_LIBRARY_VERSION_INT < 1610928000
+			int ourSocketIPv4 = setUpOurSocket(env, rtspPort);
+#else
+			int ourSocketIPv4 = setUpOurSocket(env, rtspPort, AF_INET);
+#endif			
+#if LIVEMEDIA_LIBRARY_VERSION_INT	<	1611187200
+		  	int ourSocketIPv6 = -1;
+#else
+		  	int ourSocketIPv6 = setUpOurSocket(env, rtspPort, AF_INET6);
+#endif		  
+
+			if (ourSocketIPv4 != -1) 
 			{
-				httpServer = new HTTPServer(env, ourSocket, rtspPort, authDatabase, reclamationTestSeconds, hlsSegment, webroot);
+				httpServer = new HTTPServer(env, ourSocketIPv4, ourSocketIPv6, rtspPort, authDatabase, reclamationTestSeconds, hlsSegment, webroot);
 			}
 			return httpServer;
 		}
 
-		HTTPServer(UsageEnvironment& env, int ourSocket, Port rtspPort, UserAuthenticationDatabase* authDatabase, unsigned reclamationTestSeconds, unsigned int hlsSegment, const std::string & webroot)
-		  : RTSPServer(env, ourSocket, rtspPort, authDatabase, reclamationTestSeconds), m_hlsSegment(hlsSegment), m_webroot(webroot)
+#if LIVEMEDIA_LIBRARY_VERSION_INT	<	1611187200
+		HTTPServer(UsageEnvironment& env, int ourSocketIPv4, int ourSocketIPv6, Port rtspPort, UserAuthenticationDatabase* authDatabase, unsigned reclamationTestSeconds, unsigned int hlsSegment, const std::string & webroot)
+		  : RTSPServer(env, ourSocketIPv4, rtspPort, authDatabase, reclamationTestSeconds), m_hlsSegment(hlsSegment), m_webroot(webroot)
+#else
+		HTTPServer(UsageEnvironment& env, int ourSocketIPv4, int ourSocketIPv6, Port rtspPort, UserAuthenticationDatabase* authDatabase, unsigned reclamationTestSeconds, unsigned int hlsSegment, const std::string & webroot)
+		  : RTSPServer(env, ourSocketIPv4, ourSocketIPv6, rtspPort, authDatabase, reclamationTestSeconds), m_hlsSegment(hlsSegment), m_webroot(webroot)
+#endif			
 		{
                        if ( (!m_webroot.empty()) && (*m_webroot.rend() != '/') ) {
                                m_webroot += "/";
                        }
 		}
 
-		RTSPServer::RTSPClientConnection* createNewClientConnection(int clientSocket, struct sockaddr_in clientAddr) 
+		RTSPServer::RTSPClientConnection* createNewClientConnection(int clientSocket, struct SOCKETCLIENT clientAddr) 
 		{
 			return new HTTPClientConnection(*this, clientSocket, clientAddr);
 		}
